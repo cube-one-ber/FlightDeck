@@ -12,7 +12,7 @@
     "displayName": "FlightDeck",
     "description": "Next launch countdown and Starship campaign progress",
     "category": "Info",
-    "defaultSection": "centerEnd",
+    "defaultSection": "center",
     "allowMultiple": false
   }
 }
