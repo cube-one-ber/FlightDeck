@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="Main.qml">Main.qml</file>
+        <file alias="HeaderBar.qml">HeaderBar.qml</file>
+        <file alias="BoxedCard.qml">BoxedCard.qml</file>
+        <file alias="StatusPill.qml">StatusPill.qml</file>
+        <file alias="SymbolicIcon.qml">SymbolicIcon.qml</file>
+        <file alias="ToastOverlay.qml">ToastOverlay.qml</file>
+        <file alias="CampaignView.qml">CampaignView.qml</file>
+        <file alias="ScheduleView.qml">ScheduleView.qml</file>
+        <file alias="HelpOverlay.qml">HelpOverlay.qml</file>
+        <file alias="Countdown.js">Countdown.js</file>
+        <file alias="i18n/en.json">i18n/en.json</file>
+    </qresource>
+</RCC>

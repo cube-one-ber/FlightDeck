@@ -1,0 +1,15 @@
+#!/bin/sh
+# Builds the flightdeck CLI/daemon (Rust) and the Mission Control window (Qt).
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cargo build --release --manifest-path "$ROOT/daemon/Cargo.toml"
+
+mkdir -p "$ROOT/app/build"
+cd "$ROOT/app/build"
+qmake6 "$ROOT/app/flightdeck-gui.pro"
+make -j"$(nproc)"
+
+# `flightdeck open` looks for the window beside itself, so dev builds work in place.
+ln -sf "$ROOT/app/build/flightdeck-gui" "$ROOT/daemon/target/release/flightdeck-gui"
+echo "Built $ROOT/daemon/target/release/flightdeck and $ROOT/app/build/flightdeck-gui"

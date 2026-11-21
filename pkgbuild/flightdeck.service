@@ -1,0 +1,10 @@
+[Unit]
+Description=FlightDeck: live Starship campaign and launch schedule
+
+[Service]
+ExecStart=/usr/bin/flightdeck daemon
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

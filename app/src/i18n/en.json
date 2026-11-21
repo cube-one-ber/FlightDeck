@@ -1,0 +1,22 @@
+{
+  "%n min ago": {
+    "one": "%n min ago",
+    "other": "%n mins ago"
+  },
+  "%n hr ago": {
+    "one": "%n hr ago",
+    "other": "%n hrs ago"
+  },
+  "%n day ago": {
+    "one": "%n day ago",
+    "other": "%n days ago"
+  },
+  "%n launches": {
+    "one": "%n launch",
+    "other": "%n launches"
+  },
+  "%n active": {
+    "one": "%n active",
+    "other": "%n active"
+  }
+}

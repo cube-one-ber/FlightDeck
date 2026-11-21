@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.cube-one-ber.flightdeck",
+  "name": "FlightDeck",
+  "version": "0.1.0",
+  "author": "Cube1ber",
+  "license": "MIT",
+  "description": "Next launch countdown and Starship campaign progress",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "widget/BarWidget.qml" },
+  "barWidget": {
+    "displayName": "FlightDeck",
+    "description": "Next launch countdown and Starship campaign progress",
+    "category": "Info",
+    "defaultSection": "centerEnd",
+    "allowMultiple": false
+  }
+}

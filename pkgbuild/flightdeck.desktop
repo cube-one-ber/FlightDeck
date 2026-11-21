@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FlightDeck
+Comment=Live Starship campaign and launch schedule
+Exec=flightdeck open
+Icon=flightdeck
+Terminal=false
+Categories=Utility;Education;
+StartupWMClass=flightdeck

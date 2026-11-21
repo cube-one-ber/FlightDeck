@@ -1,0 +1,17 @@
+#!/bin/sh
+# Builds and installs the package, starts the service, and links the bar
+# widget into Omarchy's plugin directory. Add it to the bar afterwards with
+# `omarchy bar put io.github.cube-one-ber.flightdeck`.
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$ROOT/pkgbuild"
+makepkg -fsi
+
+systemctl --user daemon-reload
+systemctl --user enable --now flightdeck.service
+systemctl --user restart flightdeck.service
+
+mkdir -p "$HOME/.config/omarchy/plugins"
+rm -f "$HOME/.config/omarchy/plugins/flightdeck.bar"
+ln -sfn /usr/share/flightdeck "$HOME/.config/omarchy/plugins/io.github.cube-one-ber.flightdeck"

@@ -1,0 +1,31 @@
+pkgname=flightdeck
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Live Starship campaign and launch schedule for Omarchy'
+arch=('x86_64' 'aarch64')
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-wayland' 'kirigami' 'papirus-icon-theme' 'adwaita-fonts' 'breeze-icons' 'wl-clipboard' 'libnotify')
+makedepends=('cargo' 'gcc' 'make')
+# ring's C code built with makepkg's -flto can't be linked by rust-lld.
+options=('!lto')
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/.."
+  ./bin/build
+}
+
+package() {
+  cd "$startdir/.."
+  install -Dm755 daemon/target/release/flightdeck "$pkgdir/usr/bin/flightdeck"
+  install -Dm755 app/build/flightdeck-gui "$pkgdir/usr/lib/flightdeck/flightdeck-gui"
+  install -Dm644 "$startdir/flightdeck.service" "$pkgdir/usr/lib/systemd/user/flightdeck.service"
+  install -Dm644 "$startdir/flightdeck.desktop" "$pkgdir/usr/share/applications/flightdeck.desktop"
+  install -Dm644 "$startdir/flightdeck.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/flightdeck.svg"
+  install -Dm644 manifest.json "$pkgdir/usr/share/flightdeck/manifest.json"
+  for f in BarWidget.qml Countdown.js; do
+    install -Dm644 "widget/$f" "$pkgdir/usr/share/flightdeck/widget/$f"
+  done
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

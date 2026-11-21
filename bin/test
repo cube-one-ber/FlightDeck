@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cargo test --manifest-path "$ROOT/daemon/Cargo.toml"
+
+mkdir -p "$ROOT/app/build/tests"
+cd "$ROOT/app/build/tests"
+qmake6 "$ROOT/app/tests/flightdeck_tests.pro"
+make -j"$(nproc)"
+QT_QPA_PLATFORM=offscreen ./flightdeck_tests
