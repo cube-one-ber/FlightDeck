@@ -12,6 +12,18 @@ systemctl --user daemon-reload
 systemctl --user enable --now flightdeck.service
 systemctl --user restart flightdeck.service
 
-mkdir -p "$HOME/.config/omarchy/plugins"
-rm -f "$HOME/.config/omarchy/plugins/flightdeck.bar"
-ln -sfn /usr/share/flightdeck "$HOME/.config/omarchy/plugins/io.github.cube-one-ber.flightdeck"
+PLUGIN_DIR="$HOME/.config/omarchy/plugins"
+PLUGIN_TARGET="$PLUGIN_DIR/io.github.cube-one-ber.flightdeck"
+LEGACY_LINK="$PLUGIN_DIR/flightdeck.bar"
+
+mkdir -p "$PLUGIN_DIR"
+if [ -L "$LEGACY_LINK" ] && [ "$(readlink -- "$LEGACY_LINK")" = "/usr/share/flightdeck/widget" ]; then
+  rm -f "$LEGACY_LINK"
+fi
+if [ -L "$PLUGIN_TARGET" ] && [ "$(readlink -- "$PLUGIN_TARGET")" = "/usr/share/flightdeck" ]; then
+  :
+elif [ ! -e "$PLUGIN_TARGET" ] && [ ! -L "$PLUGIN_TARGET" ]; then
+  ln -s /usr/share/flightdeck "$PLUGIN_TARGET"
+else
+  echo "Keeping existing plugin at $PLUGIN_TARGET (not replacing user-managed checkout or link)." >&2
+fi

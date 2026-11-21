@@ -131,6 +131,15 @@ Kirigami.ApplicationWindow {
         return qsTr("%n day ago", "", Math.round(mins / 1440))
     }
 
+    function isSafeWebUrl(u) {
+        if (typeof u !== "string") return false
+        return /^https?:\/\/[^/\s?#]+(?:[/?#][^\s]*)?$/i.test(u.trim())
+    }
+
+    function openWebUrl(u) {
+        if (isSafeWebUrl(u)) Qt.openUrlExternally(u.trim())
+    }
+
     header: HeaderBar {
         id: headerBar
         currentView: win.view
@@ -143,15 +152,15 @@ Kirigami.ApplicationWindow {
         campaignProgress: win.st && win.st.campaign
                           ? win.st.campaign.done + "/" + win.st.campaign.total
                           : ""
-        liveUrl: win.st && win.st.campaign && win.st.campaign.live_url
-                 ? win.st.campaign.live_url
+        liveUrl: win.st && win.st.campaign && win.isSafeWebUrl(win.st.campaign.live_url)
+                 ? win.st.campaign.live_url.trim()
                  : ""
 
         onViewSelected: function(idx) { win.view = idx }
         onSyncRequested: backend.sync()
         onCopyChecklistRequested: backend.copyChecklist()
         onCopyWeekendRequested: backend.copyWeekend()
-        onOpenLiveRequested: if (liveUrl) Qt.openUrlExternally(liveUrl)
+        onOpenLiveRequested: win.openWebUrl(liveUrl)
         onShortcutsRequested: win.helpVisible = true
         onQuitRequested: Qt.quit()
     }

@@ -7,7 +7,24 @@
 use crate::config::Config;
 use anyhow::{bail, Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::io::Read;
 use std::time::Duration;
+
+/// Hard cap on any single API response body so a runaway or hostile response
+/// cannot exhaust memory before JSON decoding.
+const MAX_RESPONSE_BYTES: u64 = 16 * 1024 * 1024;
+
+fn read_bounded<R: Read>(reader: R, limit: u64, label: &str) -> Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let read = reader
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut buf)
+        .with_context(|| format!("reading {label}"))?;
+    if read as u64 > limit {
+        bail!("GET {label}: response exceeded {limit} bytes");
+    }
+    Ok(buf)
+}
 
 /// Removes `null` object fields, so `#[serde(default)]` covers a field the API
 /// sends as null just as it covers one it leaves out.
@@ -46,7 +63,11 @@ impl Client {
         if !status.is_success() {
             bail!("GET {path}: HTTP {status}");
         }
-        let mut value: serde_json::Value = serde_json::from_slice(&resp.bytes()?).with_context(|| format!("decoding {path}"))?;
+        if resp.content_length().is_some_and(|n| n > MAX_RESPONSE_BYTES) {
+            bail!("GET {path}: response exceeded {MAX_RESPONSE_BYTES} bytes");
+        }
+        let body = read_bounded(resp, MAX_RESPONSE_BYTES, path)?;
+        let mut value: serde_json::Value = serde_json::from_slice(&body).with_context(|| format!("decoding {path}"))?;
         drop_nulls(&mut value);
         serde_json::from_value(value).with_context(|| format!("decoding {path}"))
     }
@@ -232,5 +253,12 @@ mod tests {
         drop_nulls(&mut v);
         let rows = serde_json::from_value::<Listing<LaunchRow>>(v).unwrap().list;
         assert_eq!((rows[0].id, rows[0].name.as_str(), rows[0].status, rows[0].pad), (7, "", 0, None));
+    }
+
+    #[test]
+    fn rejects_oversized_responses() {
+        let ok = read_bounded(&b"hello"[..], 5, "test").unwrap();
+        assert_eq!(ok, b"hello");
+        assert!(read_bounded(&b"hello!"[..], 5, "test").is_err());
     }
 }

@@ -8,8 +8,10 @@
 use anyhow::{Context, Result};
 use fs2::FileExt;
 use serde::{de::DeserializeOwned, Serialize};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -59,18 +61,54 @@ pub fn read_json<T: DeserializeOwned + Default>(path: &Path) -> Result<T> {
     }
 }
 
-/// Writes beside the target and renames over it, so readers never see a torn file.
+fn ensure_private_dir(dir: &Path) -> Result<()> {
+    let mut b = DirBuilder::new();
+    b.recursive(true);
+    #[cfg(unix)]
+    b.mode(0o700);
+    b.create(dir).with_context(|| format!("creating {}", dir.display()))
+}
+
+/// Writes raw bytes to an exclusive, random-named temp file (`O_CREAT | O_EXCL`,
+/// `0600`) in the target directory and atomically renames over `path`, so a
+/// pre-placed symlink at a temp path or at `path` itself is never followed.
+pub fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    let dir = path.parent().context("path has no parent")?;
+    ensure_private_dir(dir)?;
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".flightdeck-")
+        .suffix(".tmp")
+        .tempfile_in(dir)
+        .with_context(|| format!("creating temp file in {}", dir.display()))?;
+    tmp.write_all(bytes)?;
+    tmp.as_file().sync_all()?;
+    tmp.persist(path)
+        .map_err(|e| e.error)
+        .with_context(|| format!("replacing {}", path.display()))?;
+    Ok(())
+}
+
+/// Writes beside the target using an exclusive temp file and renames over it,
+/// so readers never see a torn file and symlinks are never followed.
 pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<()> {
     let dir = path.parent().context("path has no parent")?;
-    fs::create_dir_all(dir)?;
-    let tmp = dir.join(format!(".{}.{}.tmp", path.file_name().unwrap().to_string_lossy(), std::process::id()));
+    ensure_private_dir(dir)?;
+    let mut tmp = tempfile::Builder::new()
+        .prefix(".flightdeck-")
+        .suffix(".tmp")
+        .tempfile_in(dir)
+        .with_context(|| format!("creating temp file in {}", dir.display()))?;
     {
-        let mut f = std::io::BufWriter::new(File::create(&tmp)?);
-        serde_json::to_writer(&mut f, value)?;
-        f.write_all(b"\n")?;
-        f.into_inner().map_err(|e| e.into_error())?.sync_all()?;
+        let mut w = std::io::BufWriter::new(tmp.as_file_mut());
+        serde_json::to_writer(&mut w, value)?;
+        w.write_all(b"\n")?;
+        w.flush()?;
     }
-    fs::rename(&tmp, path).with_context(|| format!("replacing {}", path.display()))
+    tmp.as_file().sync_all()?;
+    tmp.persist(path)
+        .map_err(|e| e.error)
+        .with_context(|| format!("replacing {}", path.display()))?;
+    Ok(())
 }
 
 /// The file's mtime and inode; `None` when it is missing or can't be read.
@@ -83,8 +121,13 @@ pub fn identity(path: &Path) -> Option<(SystemTime, u64)> {
 pub struct Lock(#[allow(dead_code)] File);
 
 fn open_lock(path: &Path) -> Result<File> {
-    fs::create_dir_all(path.parent().unwrap())?;
-    Ok(OpenOptions::new().create(true).truncate(false).write(true).open(path)?)
+    let dir = path.parent().context("lock path has no parent")?;
+    ensure_private_dir(dir)?;
+    let mut opts = OpenOptions::new();
+    opts.create(true).truncate(false).write(true);
+    #[cfg(unix)]
+    opts.mode(0o600).custom_flags(libc::O_NOFOLLOW);
+    opts.open(path).with_context(|| format!("opening {}", path.display()))
 }
 
 impl Lock {
@@ -126,5 +169,31 @@ mod tests {
         assert!(Lock::try_writer(&paths).unwrap().is_none());
         drop(held);
         assert!(Lock::try_writer(&paths).unwrap().is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_and_locks_do_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let outside = tempfile::tempdir().unwrap();
+        let sentinel = outside.path().join("sentinel.txt");
+        fs::write(&sentinel, b"untouched").unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("state.json");
+        let predictable_tmp = dir.path().join(format!(".state.json.{}.tmp", std::process::id()));
+        symlink(&sentinel, &predictable_tmp).unwrap();
+        symlink(&sentinel, &target).unwrap();
+
+        write_json_atomic(&target, &serde_json::json!({"ok": true})).unwrap();
+        assert_eq!(fs::read(&sentinel).unwrap(), b"untouched");
+        assert!(!fs::symlink_metadata(&target).unwrap().file_type().is_symlink());
+        assert_eq!(read_json::<serde_json::Value>(&target).unwrap(), serde_json::json!({"ok": true}));
+
+        let lock_path = dir.path().join("writer.lock");
+        symlink(&sentinel, &lock_path).unwrap();
+        assert!(Lock::try_writer(&Paths::new(dir.path().to_path_buf())).is_err());
+        assert_eq!(fs::read(&sentinel).unwrap(), b"untouched");
     }
 }

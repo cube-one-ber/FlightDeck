@@ -224,6 +224,21 @@ fn short_title(title: &str) -> String {
     }
 }
 
+/// Accepts only explicit `http://` or `https://` web URLs with a host, so
+/// unexpected schemes (`file://`, `javascript:`, custom handlers) from the
+/// remote feed can never be handed to the desktop opener.
+pub fn sanitize_web_url(raw: Option<&str>) -> Option<String> {
+    let s = raw?.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let parsed = reqwest::Url::parse(s).ok()?;
+    match parsed.scheme() {
+        "http" | "https" if parsed.host_str().is_some_and(|h| !h.is_empty()) => Some(parsed.into()),
+        _ => None,
+    }
+}
+
 fn campaign(data: &StarshipData, overrides: &Overrides) -> Option<Campaign> {
     let manager = data.status_manager.as_ref()?;
     let milestones: Vec<Milestone> = data
@@ -236,7 +251,7 @@ fn campaign(data: &StarshipData, overrides: &Overrides) -> Option<Campaign> {
             Milestone {
                 id: m.id,
                 title: m.title.clone(),
-                url: m.url.clone().filter(|u| !u.is_empty()),
+                url: sanitize_web_url(m.url.as_deref()),
                 live: m.confirmed,
                 forced,
                 done: forced.unwrap_or(m.confirmed),
@@ -246,17 +261,33 @@ fn campaign(data: &StarshipData, overrides: &Overrides) -> Option<Campaign> {
         .collect();
     let mut vehicles: Vec<_> = data.vehicles.iter().filter(|v| v.status == "Active").collect();
     vehicles.sort_by(|a, b| b.ordering.total_cmp(&a.ordering));
-    let mut tests = data.tests.clone();
+    let mut tests: Vec<VehicleTest> = data
+        .tests
+        .iter()
+        .cloned()
+        .map(|mut t| {
+            t.vid_url = sanitize_web_url(t.vid_url.as_deref());
+            t
+        })
+        .collect();
     tests.sort_by(|a, b| b.date.cmp(&a.date));
     tests.truncate(6);
-    let mut videos = data.videos.clone();
+    let mut videos: Vec<Video> = data
+        .videos
+        .iter()
+        .cloned()
+        .map(|mut v| {
+            v.url = sanitize_web_url(v.url.as_deref());
+            v
+        })
+        .collect();
     videos.sort_by(|a, b| b.date.cmp(&a.date));
     videos.truncate(5);
     let kmh = |ms: f64| (ms * 3.6 * 10.0).round() / 10.0;
     Some(Campaign {
         title: manager.title.clone(),
         short: short_title(&manager.title),
-        live_url: manager.starbase_live.clone().filter(|u| !u.is_empty()),
+        live_url: sanitize_web_url(manager.starbase_live.as_deref()),
         done: milestones.iter().filter(|m| m.done).count(),
         total: milestones.len(),
         milestones,
@@ -474,5 +505,42 @@ mod tests {
         let next = s.next.unwrap();
         assert_eq!((next.id, next.net.as_str()), (1, "NET Nov 2026"));
         assert_eq!(s.bar.t0, None, "no fake countdown for a month-level date");
+    }
+
+    #[test]
+    fn strips_non_http_provider_urls() {
+        let cache = Cache {
+            starship: Some(StarshipData {
+                status_manager: Some(StatusManager {
+                    id: 2,
+                    title: "Starship Flight 16".into(),
+                    starbase_live: Some("file:///etc/passwd".into()),
+                }),
+                statuses: vec![
+                    RemoteMilestone { id: 1, title: "ok".into(), confirmed: true, url: Some("https://example.com/ok".into()) },
+                    RemoteMilestone { id: 2, title: "bad".into(), confirmed: false, url: Some("javascript:alert(1)".into()) },
+                ],
+                tests: vec![
+                    VehicleTest { id: 1, name: "t1".into(), date: None, location: None, vid_url: Some("smb://host/share".into()) },
+                    VehicleTest { id: 2, name: "t2".into(), date: None, location: None, vid_url: Some("http://example.com/v".into()) },
+                ],
+                videos: vec![
+                    Video { id: 1, title: "v1".into(), date: None, url: Some("/local/file.pdf".into()) },
+                    Video { id: 2, title: "v2".into(), date: None, url: Some("https://youtube.com/watch?v=123".into()) },
+                ],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let c = derive(&cache, &Overrides::default(), &Config::default(), t("2026-11-19T00:00:00Z"))
+            .campaign
+            .unwrap();
+        assert_eq!(c.live_url, None);
+        assert_eq!(c.milestones[0].url.as_deref(), Some("https://example.com/ok"));
+        assert_eq!(c.milestones[1].url, None);
+        assert_eq!(c.recent_tests.iter().find(|x| x.id == 1).unwrap().vid_url, None);
+        assert_eq!(c.recent_tests.iter().find(|x| x.id == 2).unwrap().vid_url.as_deref(), Some("http://example.com/v"));
+        assert_eq!(c.videos.iter().find(|x| x.id == 1).unwrap().url, None);
+        assert_eq!(c.videos.iter().find(|x| x.id == 2).unwrap().url.as_deref(), Some("https://youtube.com/watch?v=123"));
     }
 }

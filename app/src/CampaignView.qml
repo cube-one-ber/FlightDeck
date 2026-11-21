@@ -91,11 +91,21 @@ Item {
         else backend.setMilestone(m.id, "auto")
     }
 
+    // Only allow http(s) URLs to reach the desktop opener.
+    function isSafeWebUrl(u) {
+        if (typeof u !== "string") return false
+        return /^https?:\/\/[^/\s?#]+(?:[/?#][^\s]*)?$/i.test(u.trim())
+    }
+
+    function openWebUrl(u) {
+        if (isSafeWebUrl(u)) Qt.openUrlExternally(u.trim())
+    }
+
     function openLink() {
         if (narrow && narrowTab !== 0) return
         var m = milestones[list.currentIndex]
-        if (m && m.url) Qt.openUrlExternally(m.url)
-        else if (campaign && campaign.live_url) Qt.openUrlExternally(campaign.live_url)
+        if (m && isSafeWebUrl(m.url)) openWebUrl(m.url)
+        else if (campaign && isSafeWebUrl(campaign.live_url)) openWebUrl(campaign.live_url)
     }
 
     // Closures and TFRs have no fixed shape in the feed; show the first readable fields.
@@ -309,14 +319,14 @@ Item {
 
                         QQC2.AbstractButton {
                             id: liveBtn
-                            visible: !!(root.campaign && root.campaign.live_url)
+                            visible: !!(root.campaign && root.isSafeWebUrl(root.campaign.live_url))
                             implicitWidth: liveBtnRow.implicitWidth + 20
                             implicitHeight: 34
                             hoverEnabled: true
                             focusPolicy: Qt.TabFocus
                             Accessible.role: Accessible.Button
                             Accessible.name: qsTr("Open Starbase Live")
-                            onClicked: Qt.openUrlExternally(root.campaign.live_url)
+                            onClicked: root.openWebUrl(root.campaign ? root.campaign.live_url : "")
 
                             background: Rectangle {
                                 radius: theme.controlRadius
@@ -727,10 +737,10 @@ Item {
                                 }
                             }
 
-                            // External source link button when the milestone has a URL.
+                            // External source link button when the milestone has a safe web URL.
                             QQC2.AbstractButton {
                                 id: linkBtn
-                                visible: !!row.modelData.url
+                                visible: root.isSafeWebUrl(row.modelData.url)
                                 Layout.preferredWidth: 28
                                 Layout.preferredHeight: 28
                                 hoverEnabled: true
@@ -739,7 +749,7 @@ Item {
                                 Accessible.name: qsTr("Open source link")
                                 onClicked: {
                                     root.selectIndex(row.index)
-                                    Qt.openUrlExternally(row.modelData.url)
+                                    root.openWebUrl(row.modelData.url)
                                 }
 
                                 background: Rectangle {
@@ -1150,7 +1160,7 @@ Item {
                                         id: tRow
                                         required property var modelData
                                         required property int index
-                                        readonly property bool hasUrl: !!(modelData.vid_url && modelData.vid_url !== "")
+                                        readonly property bool hasUrl: root.isSafeWebUrl(modelData.vid_url)
                                         readonly property bool isLast: root.campaign && index === root.campaign.recent_tests.length - 1
 
                                         Layout.fillWidth: true
@@ -1161,7 +1171,7 @@ Item {
                                         focusPolicy: hasUrl ? Qt.TabFocus : Qt.NoFocus
                                         Accessible.role: hasUrl ? Accessible.Link : Accessible.StaticText
                                         Accessible.name: tRow.modelData.name
-                                        onClicked: if (tRow.hasUrl) Qt.openUrlExternally(tRow.modelData.vid_url)
+                                        onClicked: if (tRow.hasUrl) root.openWebUrl(tRow.modelData.vid_url)
 
                                         background: Rectangle {
                                             anchors.fill: parent
@@ -1273,7 +1283,7 @@ Item {
                                         id: vRow
                                         required property var modelData
                                         required property int index
-                                        readonly property bool hasUrl: !!(modelData.url && modelData.url !== "")
+                                        readonly property bool hasUrl: root.isSafeWebUrl(modelData.url)
                                         readonly property bool isLast: root.campaign && index === root.campaign.videos.length - 1
 
                                         Layout.fillWidth: true
@@ -1284,7 +1294,7 @@ Item {
                                         focusPolicy: hasUrl ? Qt.TabFocus : Qt.NoFocus
                                         Accessible.role: hasUrl ? Accessible.Link : Accessible.StaticText
                                         Accessible.name: vRow.modelData.title
-                                        onClicked: if (vRow.hasUrl) Qt.openUrlExternally(vRow.modelData.url)
+                                        onClicked: if (vRow.hasUrl) root.openWebUrl(vRow.modelData.url)
 
                                         background: Rectangle {
                                             anchors.fill: parent

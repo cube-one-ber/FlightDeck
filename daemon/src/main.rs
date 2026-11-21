@@ -97,7 +97,7 @@ fn run() -> Result<()> {
         Cmd::Sync => match Writer::open(cfg, paths.clone(), false)? {
             Some(mut w) => w.sync_once(),
             None => {
-                std::fs::write(paths.refresh(), Utc::now().to_rfc3339())?;
+                store::write_bytes_atomic(&paths.refresh(), Utc::now().to_rfc3339().as_bytes())?;
                 eprintln!("flightdeck: asked the running daemon to refresh");
                 Ok(())
             }

@@ -150,7 +150,8 @@ Item {
     }
 
     function openDetails(launch) {
-        if (launch) Qt.openUrlExternally("https://nextspaceflight.com/launches/details/" + launch.id + "/")
+        if (launch && Number.isInteger(launch.id) && launch.id > 0)
+            Qt.openUrlExternally("https://nextspaceflight.com/launches/details/" + launch.id + "/")
     }
 
     function openLink() { openDetails(launches[currentIndex]) }
